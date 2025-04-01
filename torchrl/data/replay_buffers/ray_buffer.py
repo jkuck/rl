@@ -215,3 +215,13 @@ class RayReplayBuffer(ReplayBuffer):
     @property
     def dim_extend(self):
         return ray.get(self._rb._getattr.remote("dim_extend"))
+
+    def __getitem__(self, index):
+        # Forward __getitem__ to the remote actor.
+        return ray.get(self._rb.__getitem__.remote(index))
+
+    def __iter__(self):
+        # Forward __iter__ to the remote actor.
+        # Here, we assume that the remote __iter__ returns a list (or similar) that we can iterate over.
+        items = ray.get(self._rb.__iter__.remote())
+        return iter(items)
