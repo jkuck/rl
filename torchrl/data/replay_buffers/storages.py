@@ -44,6 +44,8 @@ from torchrl.data.replay_buffers.utils import (
     tree_iter,
 )
 
+# Define the type for an mp.Value instance.
+_MPValueType = type(mp.Value("i", 0))
 
 class Storage:
     """A Storage is the container of a replay buffer.
@@ -431,7 +433,7 @@ class LazyStackStorage(ListStorage):
             stack_dim = self.stack_dim
             if stack_dim < 0:
                 stack_dim = out[0].ndim + 1 + stack_dim
-            out = lazy_stack(list(out), stack_dim)
+            out = lazy_stack(list(out), stack_dim=stack_dim)
             return out
         return out
 
@@ -552,8 +554,10 @@ class TensorStorage(Storage):
     def _len(self):
         _len_value = self.__dict__.get("_len_value", None)
         if not self._compilable:
-            if _len_value is None:
-                _len_value = self._len_value = mp.Value("i", 0)
+            # Ensure _len_value is an mp.Value.
+            if not isinstance(_len_value, _MPValueType):
+                # If _len_value is None or an int (from __setstate__), wrap it.
+                _len_value = self._len_value = mp.Value("i", int(_len_value) if _len_value is not None else 0)
             return _len_value.value
         else:
             if _len_value is None:
@@ -564,11 +568,12 @@ class TensorStorage(Storage):
     def _len(self, value):
         if not self._compilable:
             _len_value = self.__dict__.get("_len_value", None)
-            if _len_value is None:
+            if not isinstance(_len_value, _MPValueType):
                 _len_value = self._len_value = mp.Value("i", 0)
             _len_value.value = value
         else:
             self._len_value = value
+
 
     @property
     def _total_shape(self):
@@ -717,11 +722,8 @@ class TensorStorage(Storage):
     def __setstate__(self, state):
         len = state.pop("len__context", None)
         if len is not None:
-            if not state["_compilable"]:
-                state["_len_value"] = len
-            else:
-                _len_value = mp.Value("i", len)
-                state["_len_value"] = _len_value
+            _len_value = mp.Value("i", len)
+            state["_len_value"] = _len_value
         self.__dict__.update(state)
 
     def state_dict(self) -> dict[str, Any]:
